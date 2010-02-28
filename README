@@ -25,12 +25,17 @@ Installation
   
   * Install the plugin
       
-      using git:
+      using symfony:
+        php symfony plugin:install sfHoptoadNotifierPlugin
+        
+      or using git:
         $ git clone git://github.com/tmarly/sfhoptoadnotifierplugin.git plugins/sfHoptoadNotifierPlugin
+        then enable the plugin in config/ProjectConfiguration.class.php
       
       or by direct download:
         get http://github.com/tmarly/sfhoptoadnotifierplugin/blob/master/sfHoptoadNotifierPlugin-2.0.0.tgz
         tar xvzf sfHoptoadNotifierPlugin-2.0.0.tgz plugins/
+        then enable the plugin in config/ProjectConfiguration.class.php
 
   * Configure your app.yml:
 
