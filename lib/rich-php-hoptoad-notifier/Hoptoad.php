@@ -1,123 +1,469 @@
 <?php
-if (!class_exists('HTTP_Request')) require_once('HTTP/Request.php');
-if (!class_exists('Horde_Yaml')) require_once('Horde/Yaml.php');
-if (!class_exists('Horde_Yaml_Dumper')) require_once('Horde/Yaml/Dumper.php');
+/**
+ * Services_Hoptoad
+ *
+ * @category error
+ * @package  Services_Hoptoad
+ * @author   Rich Cavanaugh <no@email>
+ * @author   Till Klampaeckel <till@php.net>
+ * @license  
+ * @version  GIT: $Id$
+ * @link     http://github.com/till/php-hoptoad-notifier
+ */
 
-class Hoptoad
+
+/**
+ * Services_Hoptoad
+ *
+ * @category error
+ * @package  Services_Hoptoad
+ * @author   Rich Cavanaugh <no@email>
+ * @author   Till Klampaeckel <till@php.net>
+ * @license  
+ * @version  Release: @package_version@
+ * @link     http://github.com/rich/php-hoptoad-notifier
+ */
+class Services_Hoptoad
 {
-  /**
-   * Install the error and exception handlers that connect to Hoptoad
-   *
-   * @return void
-   * @author Rich Cavanaugh
-   */
-  public static function installHandlers($api_key=NULL)
-  {
-    if (isset($api_key) and !defined('HOPTOAD_API_KEY')) define('HOPTOAD_API_KEY', $api_key);
+	const NOTIFIER_NAME = 'php-hoptoad-notifier';
+	const NOTIFIER_VERSION = '0.2.0';
+	const NOTIFIER_URL = 'http://github.com/rich/php-hoptoad-notifier';
+	const NOTIFIER_API_VERSION = '2.0';
 
-    set_error_handler(array("Hoptoad", "errorHandler"));
-    set_exception_handler(array("Hoptoad", "exceptionHandler"));
-  }
+	protected $error_class;
+	protected $message;
+	protected $file;
+	protected $line;
+	protected $trace;
 
-  /**
-   * Handle a php error
-   *
-   * @param string $code
-   * @param string $message
-   * @param string $file
-   * @param string $line
-   * @return void
-   * @author Rich Cavanaugh
-   */
-  public static function errorHandler($code, $message, $file, $line)
-  {
-    if ($code == E_STRICT) return;
+	/**
+	 * Report E_STRICT
+	 *
+	 * @var bool $reportESTRICT
+	 * @todo Implement set!
+	 */
+	protected $reportESTRICT;
 
-    $trace = Hoptoad::tracer();
-    Hoptoad::notifyHoptoad(HOPTOAD_API_KEY, $message, $file, $line, $trace, null);
-  }
+	/**
+	 * Timeout for cUrl.
+	 * @var int $timeout
+	 */
+	protected $timeout;
 
-  /**
-   * Handle a raised exception
-   *
-   * @param string $exception
-   * @return void
-   * @author Rich Cavanaugh
-   */
-  public static function exceptionHandler($exception)
-  {
-    $trace = Hoptoad::tracer($exception->getTrace());
+	public $client; // pear, curl or zend
 
-    Hoptoad::notifyHoptoad(HOPTOAD_API_KEY, $exception->getMessage(), $exception->getFile(), $exception->getLine(), $trace, null);
-  }
+	/**
+	 * @var mixed $apiKey
+	 */
+	public $apiKey;
 
-  /**
-   * Pass the error and environment data on to Hoptoad
-   *
-   * @package default
-   * @author Rich Cavanaugh
-   */
-  public static function notifyHoptoad($api_key, $message, $file, $line, $trace, $error_class=null)
-  {
-    $req =& new HTTP_Request("http://hoptoadapp.com/notices/", array("method" => "POST", "timeout" => 2));
-    $req->addHeader('Accept', 'text/xml, application/xml');
-    $req->addHeader('Content-type', 'application/x-yaml');
+	/**
+	 * @var string
+	 **/
+	public $environment;
 
-    array_unshift($trace, "$file:$line");
+	/**
+	 * Initialize the chosen notifier and install the error
+	 * and exception handlers that connect to Hoptoad
+	 *
+	 * @return void
+	 * @author Rich Cavanaugh
+	 */
+	public static function installHandlers($apiKey=NULL, $environment=NULL, $client=NULL, $class='Services_Hoptoad')
+	{
+		$hoptoad = new $class($apiKey, $environment, $client);
+		$hoptoad->installNotifierHandlers();
+	}
 
-    if (isset($_SESSION)) {
-      $session = array('key' => session_id(), 'data' => $_SESSION);
-    } else {
-      $session = array();
-    }
+	/**
+	 * Hook's this notifier to PHP error and exception handlers
+	 * @return void
+	 * @author Rich Cavanaugh
+	 **/
+	public function installNotifierHandlers()
+	{
+		set_error_handler(array($this, "errorHandler"));
+		set_exception_handler(array($this, "exceptionHandler"));		
+	}
 
-    $url = "http://{$_SERVER['HTTP_HOST']}{$_SERVER['REQUEST_URI']}";
-    $body = array(
-      'api_key'         => $api_key,
-      'error_class'     => $error_class,
-      'error_message'   => $message,
-      'backtrace'       => $trace,
-      'request'         => array("params" => $_REQUEST, "url" => $url),
-      'session'         => $session,
-      'environment'     => $_SERVER
-    );
+	/**
+	 * Initialize the Hoptad client
+	 *
+	 * @param string $apiKey
+	 * @param string $environment
+	 * @param string $client
+	 * @param string $reportESTRICT
+	 * @param int $timeout
+	 * @return void
+	 * @author Rich Cavanaugh
+	 */	
+	function __construct($apiKey, $environment='production', $client='pear', $reportESTRICT=false, $timeout=2)
+	{
+		$this->apiKey = $apiKey;
+		$this->environment = $environment;
+		$this->client = $client;
+		$this->reportESTRICT = $reportESTRICT;
+		$this->timeout = $timeout;
+		$this->setup();
+	}
 
-    $req->setBody(Horde_Yaml::dump(array("notice" => $body)));
-    $req->sendRequest();
-  }
+	/**
+	 * A method meant specifically for subclasses to override so they don't need
+	 * to handle the constructor
+	 * @return void
+	 * @author Rich Cavanaugh
+	 **/
+	public function setup()
+	{
+		// we don't do anything here in the base class
+	}
 
-  /**
-   * Build a trace that is formatted in the way Hoptoad expects
-   *
-   * @param string $trace
-   * @return void
-   * @author Rich Cavanaugh
-   */
-  public static function tracer($trace = NULL)
-  {
-    $lines = Array();
+	/**
+	 * Handle a php error
+	 *
+	 * @param string $code 
+	 * @param string $message 
+	 * @param string $file 
+	 * @param string $line 
+	 * @return void
+	 * @author Rich Cavanaugh
+	 */
+	public function errorHandler($code, $message, $file, $line)
+	{
+		if ($code == E_STRICT && $this->reportESTRICT === false) return;
 
-    $trace = $trace ? $trace : debug_backtrace();
+		$this->notify($code, $message, $file, $line, debug_backtrace());
+	}
 
-    $indent = '';
-    $func = '';
+	/**
+	 * Handle a raised exception
+	 *
+	 * @param Exception $exception 
+	 * @return void
+	 * @author Rich Cavanaugh
+	 */
+	public function exceptionHandler($exception)
+	{
+		$this->notify(get_class($exception), $exception->getMessage(), $exception->getFile(), $exception->getLine(), $exception->getTrace());
+	}
 
-    foreach($trace as $val) {
-      if (isset($val['class']) && $val['class'] == 'Hoptoad') continue;
+	/**
+	 * Set the values to be used for the next notice sent to Hoptoad
+	 * @return void
+	 * @author Rich Cavanaugh
+	 **/
+	public function setParamsForNotify($error_class, $message, $file, $line, $trace, $component=NULL)
+	{
+		$this->error_class = $error_class;
+		$this->message = $message;
+		$this->file = $file;
+		$this->line = $line;
+		$this->trace = $trace;
+		$this->component = $component;
+	}
 
-      $file = isset($val['file']) ? $val['file'] : 'Unknown file';
-      $line_number = isset($val['line']) ? $val['line'] : '';
-      $func = isset($val['function']) ? $val['function'] : '';
-      $class = isset($val['class']) ? $val['class'] : '';
+	/**
+	 * Pass the error and environment data on to Hoptoad
+	 *
+	 * @param mixed  $error_class
+	 * @param string $message
+	 * @param string $file
+	 * @param string $line
+	 * @param array  $trace
+	 * @param string $environment
+	 *
+	 * @author Rich Cavanaugh
+	 * @todo   Handle response (e.g. errors)
+	 */
+	function notify($error_class, $message, $file, $line, $trace, $component=NULL)
+	{
+		$this->setParamsForNotify($error_class, $message, $file, $line, $trace, $component);
 
-      $line = $file;
-      if ($line_number) $line .= ':' . $line_number;
-      if ($func) $line .= ' in function ' . $func;
-      if ($class) $line .= ' in class ' . $class;
+		$url = "http://hoptoadapp.com/notifier_api/v2/notices";
+		$headers = array(
+			'Accept'				=> 'text/xml, application/xml',
+			'Content-Type'	=> 'text/xml'
+		);
+		$body = $this->buildXmlNotice();
 
-      $lines[] = $line;
-    }
+		try {
+			$status = call_user_func_array(array($this, $this->client . 'Request'), array($url, $headers, $body));
+			if ($status != 200) $this->handleErrorResponse($status);
+		} catch (RuntimeException $e) {
+			// TODO do something reasonable with the runtime exception.
+			// we can't really throw our runtime exception since we're likely in
+			// an exception handler. Punt on this for now and come back to it.
+		}
+	}
 
-    return $lines;
-  }
+	/**
+	 * Build up the XML to post according to the documentation at:
+	 * http://help.hoptoadapp.com/faqs/api-2/notifier-api-v2
+	 * @return string
+	 * @author Rich Cavanaugh
+	 **/
+	function buildXmlNotice()
+	{
+		$doc = new SimpleXMLElement('<notice />');
+		$doc->addAttribute('version', self::NOTIFIER_API_VERSION);
+		$doc->addChild('api-key', $this->apiKey);
+
+		$notifier = $doc->addChild('notifier');
+		$notifier->addChild('name', self::NOTIFIER_NAME);
+		$notifier->addChild('version', self::NOTIFIER_VERSION);
+		$notifier->addChild('url', self::NOTIFIER_URL);
+
+		$error = $doc->addChild('error');
+		$error->addChild('class', $this->error_class);
+		$error->addChild('message', $this->message);
+		$this->addXmlBacktrace($error);
+
+		$request = $doc->addChild('request');
+		$request->addChild('url', $this->request_uri());
+		$request->addChild('component', $this->component());
+		$request->addChild('action', $this->action());
+
+		if (isset($_REQUEST)) $this->addXmlVars($request, 'params', $this->params());
+		if (isset($_SESSION)) $this->addXmlVars($request, 'session', $this->session());
+		if (isset($_SERVER)) $this->addXmlVars($request, 'cgi-data', $this->cgi_data());
+
+		$env = $doc->addChild('server-environment');
+		$env->addChild('project-root', $this->project_root());
+		$env->addChild('environment-name', $this->environment());
+
+		return $doc->asXML();
+	}
+
+	/**
+	 * Add a Hoptoad var block to the XML
+	 * @return void
+	 * @author Rich Cavanaugh
+	 **/
+	function addXmlVars($parent, $key, $source)
+	{
+		if (empty($source)) return;
+
+		$node = $parent->addChild($key);
+		foreach ($source as $key => $val) {
+      if (is_array($val)) {
+        $val = str_replace("\n", ' ', print_r($val, true));
+      }
+      if (is_array($key)) {
+        $key = str_replace("\n", ' ', print_r($key, true));
+      }
+
+      $var_node = $node->addChild('var', $val);
+      $var_node->addAttribute('key', $key);
+		}
+	}
+
+	/**
+	 * Add a Hoptoad backtrace to the XML
+	 * @return void
+	 * @author Rich Cavanaugh
+	 **/
+	function addXmlBacktrace($parent)
+	{
+		$backtrace = $parent->addChild('backtrace');
+		$line_node = $backtrace->addChild('line');
+		$line_node->addAttribute('file', $this->file);
+		$line_node->addAttribute('number', $this->line);
+
+		foreach ($this->trace as $entry) {
+			if (isset($entry['class']) && $entry['class'] == 'Services_Hoptoad') continue;
+
+			$line_node = $backtrace->addChild('line');
+      if (!isset($entry['file'])) {
+        $entry['file'] = '?';
+      }
+      if (!isset($entry['line'])) {
+        $entry['line'] = '?';
+      }
+      if (!isset($entry['function'])) {
+        $entry['function'] = '?';
+      }
+			$line_node->addAttribute('file', $entry['file']);
+			$line_node->addAttribute('number', $entry['line']);
+			$line_node->addAttribute('method', $entry['function']);
+		}
+	}
+
+	/**
+	 * params
+	 * @return array
+	 * @author Scott Woods
+	 **/
+	function params() {
+		return $_REQUEST;
+	}
+
+	/**
+	 * session
+	 * @return array
+	 * @author Scott Woods
+	 **/
+	function session() {
+		return $_SESSION;
+	}
+
+	/**
+	 * cgi_data
+	 * @return array
+	 * @author Scott Woods
+	 **/
+	function cgi_data() {
+		if (isset($_ENV) && !empty($_ENV)) {
+			return array_merge($_SERVER, $_ENV);
+		}
+		return $_SERVER;
+	}
+
+	/**
+	 * component
+	 * @return mixed
+	 * @author Scott Woods
+	 **/
+	function component() {
+		return $this->component;
+	}
+
+	/**
+	 * action
+	 * @return mixed
+	 * @author Scott Woods
+	 **/
+	function action() {
+		return '';
+	}
+
+	/**
+	 * environment
+	 * @return string
+	 * @author Rich Cavanaugh
+	 **/
+	function environment() {
+		return $this->environment;
+	}
+	
+	/**
+	 * project_root
+	 * @return string
+	 * @author Scott Woods
+	 **/
+	function project_root() {
+		if (isset($_SERVER['DOCUMENT_ROOT'])) {
+			return $_SERVER['DOCUMENT_ROOT'];
+		} else {
+			return dirname(__FILE__);
+		}
+	}
+
+
+	/**
+	 * get the request uri
+	 * @return string
+	 * @author Scott Woods
+	 **/
+	function request_uri() {
+		if (isset($_SERVER['SERVER_PORT']) && $_SERVER['SERVER_PORT'] == 443) {
+			$protocol = 'https';
+		} else {
+			$protocol = 'http';
+		}
+		$host = isset($_SERVER['HTTP_HOST']) ? $_SERVER['HTTP_HOST'] : '';
+		$path = isset($_SERVER['REQUEST_URI']) ? $_SERVER['REQUEST_URI'] : '';
+		$query_string = isset($_SERVER['QUERY_STRING']) && !empty($_SERVER['QUERY_STRING']) ? ('?' . $_SERVER['QUERY_STRING']) : '';
+		return "{$protocol}://{$host}{$path}{$query_string}";
+	}
+
+	/**
+	 * @param mixed $code The HTTP status code from Hoptoad.
+	 *
+	 * @return void
+	 * @throws RuntimeException Error message from hoptoad, translated to a RuntimeException.
+	 */
+	protected function handleErrorResponse($code)
+	{
+		switch ($code) {
+		case '403':
+			$msg = 'The requested project does not support SSL - resubmit in an http request.';
+			break;
+		case '422':
+			$msg = 'The submitted notice was invalid - check the notice xml against the schema.';
+			break;
+		case '500':
+			$msg = 'Unexpected errors - submit a bug report at http://help.hoptoadapp.com.';
+			break;
+		default:
+			$msg = 'Unknown error code from Hoptoad\'s API: ' . $code;
+			break;
+		}
+
+		throw new RuntimeException($msg, $code);
+	}
+
+	/**
+	 * Send the request to Hoptoad using PEAR
+	 * @return integer
+	 * @author Rich Cavanaugh
+	 **/
+	public function pearRequest($url, $headers, $body)
+	{
+		if (!class_exists('HTTP_Request2')) require_once('HTTP/Request2.php');
+		if (!class_exists('HTTP_Request2_Adapter_Socket')) require_once 'HTTP/Request2/Adapter/Socket.php';
+
+		$adapter = new HTTP_Request2_Adapter_Socket;
+		$req = new HTTP_Request2($url, HTTP_Request2::METHOD_POST);
+		$req->setAdapter($adapter);
+		$req->setHeader($headers);
+		$req->setBody($body);
+		return $req->send()->getStatus();
+	}
+
+	/**
+	 * Send the request to Hoptoad using Curl
+	 * @return integer
+	 * @author Rich Cavanaugh
+	 **/
+	public function curlRequest($url, $headers, $body)
+	{
+		$header_strings = array();
+		foreach ($headers as $key => $val) {
+			$header_strings[] = "{$key}: {$val}";
+		}
+
+		$curlHandle = curl_init();
+		curl_setopt($curlHandle, CURLOPT_URL,            $url);
+		curl_setopt($curlHandle, CURLOPT_POST,           1);
+		curl_setopt($curlHandle, CURLOPT_HEADER,         0);
+		curl_setopt($curlHandle, CURLOPT_TIMEOUT,        $this->timeout);
+		curl_setopt($curlHandle, CURLOPT_POSTFIELDS,     $body);
+		curl_setopt($curlHandle, CURLOPT_HTTPHEADER,     $header_strings);
+		curl_setopt($curlHandle, CURLOPT_RETURNTRANSFER, 1);
+		curl_exec($curlHandle);
+		$status = curl_getinfo($curlHandle, CURLINFO_HTTP_CODE);
+		curl_close($curlHandle);
+		return $status;
+	}
+
+	/**
+	 * Send the request to Hoptoad using Zend
+	 * @return integer
+	 * @author Rich Cavanaugh
+	 **/
+	public function zendRequest($url, $headers, $body)
+	{
+		$header_strings = array();
+		foreach ($headers as $key => $val) {
+			$header_strings[] = "{$key}: {$val}";
+		}
+
+		$client = new Zend_Http_Client($url);
+		$client->setHeaders($header_strings);
+		$client->setRawData($body, 'text/xml');
+
+		$response = $client->request('POST');
+
+		return $response->getStatus();
+	}
 }

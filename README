@@ -1,33 +1,45 @@
 sfHoptoadNotifier plugin
 ==============
 
-sfHoptoadNotifier is symfony plugin that sends notifications to Hoptoad (http://hoptoadapp.com) about your project exceptions. 
+sfHoptoadNotifier is symfony plugin that sends notifications to Hoptoad (http://hoptoadapp.com) about your project exceptions and error log messages.
 It's based on http://github.com/rich/php-hoptoad-notifier/tree/master. 
-You can check it's README (http://github.com/rich/php-hoptoad-notifier/tree/master) for more info.
+
+The version 2 of this plugin use the Hoptoad API V2. The V1 is no longer effective since the 1st feb. 2010.
 
 Installation
 ------------
 
   * Requirements
-    rich/php-hoptoad-notifier uses the Horde_Yaml class. You can install this class using the commands below.
-
-        $ pear channel-discover pear.horde.org
-        $ pear install horde/yaml
-
-    It also uses Pear's HTTP_Request:
-
-        $ pear install HTTP_Request      
+    It required a http client, which must be either curl, zend or pear (default).
+      
+      pear:
+        $ pear install HTTP_Request2
+        (if it does not work, try: $ pear install HTTP_Request2-alpha)
+      
+      curl:
+        install mod_curl. On debian-like: 
+          $ apt-get install php5-curl
+      
+      zend:
+        install Zend_Http_Client
   
   * Install the plugin
+      
+      using git:
+        $ git clone git://github.com/tmarly/sfhoptoadnotifierplugin.git plugins/sfHoptoadNotifierPlugin
+      
+      or by direct download:
+        get http://github.com/tmarly/sfhoptoadnotifierplugin/blob/master/sfHoptoadNotifierPlugin-2.0.0.tgz
+        tar xvzf sfHoptoadNotifierPlugin-2.0.0.tgz plugins/
 
-        $ git clone git://github.com/krasio/sfhoptoadnotifierplugin.git plugins/sfHoptoadNotifierPlugin
-
-  * Add your Hoptoad API key in applications `app.yml`
+  * Configure your app.yml:
 
           [yml]
           all:
             sf_hoptoad_notifier_plugin:
               api_key: you_api_key_goes_here
+              client: curl # either pear, curl, or zend
+              log_level: err # all logs of this level or above will be logged into hoptoad
 
   * Clear your cache
 
