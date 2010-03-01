@@ -4,40 +4,50 @@ sfHoptoadNotifier plugin
 sfHoptoadNotifier is symfony plugin that sends notifications to Hoptoad (http://hoptoadapp.com) about your project exceptions and error log messages.
 It's based on http://github.com/rich/php-hoptoad-notifier/tree/master. 
 
-The version 2 of this plugin use the Hoptoad API V2. The V1 is no longer effective since the 1st feb. 2010.
+The version 1.2 of this plugin use the Hoptoad API V2. The V1 is no longer effective since the 1st feb. 2010.
 
-Installation
+Requirements
 ------------
 
-  * Requirements
-    It required a http client, which must be either curl, zend or pear (default).
+It requires a http client, which must be either curl, zend or pear (default).
       
-      pear:
+ * pear:
+ 
         $ pear install HTTP_Request2
-        (if it does not work, try: $ pear install HTTP_Request2-alpha)
+  (if it does not work, try: $ pear install HTTP_Request2-alpha)
       
-      curl:
-        install mod_curl. On debian-like: 
-          $ apt-get install php5-curl
+ * curl:
+ 
+    install mod_curl. On debian-like: 
+    
+        $ apt-get install php5-curl
       
-      zend:
-        install Zend_Http_Client
+ * zend:
   
-  * Install the plugin
+    install Zend_Http_Client
+  
+Install the plugin
+------------------
       
-      using symfony:
+ * using symfony:
+ 
         php symfony plugin:install sfHoptoadNotifierPlugin
         
-      or using git:
+ * or using git:
+ 
         $ git clone git://github.com/tmarly/sfhoptoadnotifierplugin.git plugins/sfHoptoadNotifierPlugin
         then enable the plugin in config/ProjectConfiguration.class.php
       
-      or by direct download:
-        get http://github.com/tmarly/sfhoptoadnotifierplugin/blob/master/sfHoptoadNotifierPlugin-2.0.0.tgz
-        tar xvzf sfHoptoadNotifierPlugin-2.0.0.tgz plugins/
-        then enable the plugin in config/ProjectConfiguration.class.php
+ * or by direct download:
+ 
+   get http://github.com/tmarly/sfhoptoadnotifierplugin/blob/master/sfHoptoadNotifierPlugin-2.0.0.tgz
+ 
+   tar xvzf sfHoptoadNotifierPlugin-2.0.0.tgz plugins/
+  
+   then enable the plugin in config/ProjectConfiguration.class.php
 
-  * Configure your app.yml:
+Configure your app.yml:
+-----------------------
 
           [yml]
           all:
