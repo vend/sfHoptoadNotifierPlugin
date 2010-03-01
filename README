@@ -36,7 +36,7 @@ Install the plugin
  * or using git:
  
         $ git clone git://github.com/tmarly/sfhoptoadnotifierplugin.git plugins/sfHoptoadNotifierPlugin
-        then enable the plugin in config/ProjectConfiguration.class.php
+  then enable the plugin in config/ProjectConfiguration.class.php
       
  * or by direct download:
  
@@ -49,6 +49,8 @@ Install the plugin
 Configure your app.yml:
 -----------------------
 
+  * In app.yml of your applications:
+  
           [yml]
           all:
             sf_hoptoad_notifier_plugin:
