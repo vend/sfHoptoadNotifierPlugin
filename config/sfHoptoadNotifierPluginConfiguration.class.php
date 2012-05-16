@@ -54,6 +54,11 @@ class sfHoptoadNotifierPluginConfiguration extends sfPluginConfiguration
       array('sfHoptoadNotifier', 'handleExceptionEvent')
     );
 
+    $this->dispatcher->connect(
+      'hoptoad.notify_exception',
+      array('sfHoptoadNotifier', 'handleExceptionEvent')
+    );
+
     // handle log errors, ...
     $this->dispatcher->connect(
       'application.log',
