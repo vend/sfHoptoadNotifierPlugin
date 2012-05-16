@@ -38,7 +38,7 @@ class sfHoptoadNotifierPluginConfiguration extends sfPluginConfiguration
       $env = $this->configuration->getEnvironment();
     } catch (Exception $e) {
       // if called from CLI or other ...
-      $env = 'prod';
+      $env = 'unknown';
     }
 
     // Instanciate the service
